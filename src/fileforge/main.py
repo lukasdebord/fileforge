@@ -1,13 +1,11 @@
 import sys
 
-from PySide6.QtWidgets import QApplication, QMainWindow, QLabel
+from PySide6.QtWidgets import QApplication
 
-app = QApplication(sys.argv)
+from gui.main_window import MainWindow
 
-window = QMainWindow()
-label = QLabel("hello world")
-window.setCentralWidget(label)
-
-window.show()
-
-app.exec()
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    app.exec()
