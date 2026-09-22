@@ -17,23 +17,23 @@ FileForge is a personal project I am working on as a computer science major at t
 
 ## Deployment
 To install clone the repository and create a virtual environment:
-'''
+```
 git clone https://github.com/lukasdebord/fileforge.git
 cd fileforge
 
 python3 -m venv .venv
 source .venv/bin/activate
-'''
+```
 
 Install dependencies:
-'''
+```
 pip install -r requirements.txt
-'''
+```
 
 Run the application:
-'''
+```
 python -m fileforge
-'''
+```
 
 ## License
 This project is currently for personal development and experience.
