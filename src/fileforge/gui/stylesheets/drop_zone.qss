@@ -1,3 +1,18 @@
+/* Stylesheet for the drop zone widget *
+/* Color pallet: #171a2b, #211c35, #40345c, #e56b6f, #f4a261, #ffd166, #f5f1e8, #aaa4c8 */
+
 #dropZone {
-    background-color: red;
+    background-color: #171a2b;
+    border: 2px dashed #e56b6f;
+    border-radius: 10px;
+}
+
+#dropZone:hover {
+    background-color: #211c35;
+    border-color: #f4a261;
+}
+
+#dropZoneLabel {
+    color: #fba327;
+    font-size: 16px;
 }

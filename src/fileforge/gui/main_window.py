@@ -7,7 +7,8 @@
 """
 
 # imports
-from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QPushButton
+from PySide6.QtCore import Qt
 
 from .menu_bar import MenuBar
 from .drop_zone import DropZone
@@ -18,7 +19,10 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        # window configuration
+        #================================================================================
+        # === EXTERNAL WINDOW CONFIGURATION =============================================
+        #================================================================================
+
         self.setWindowTitle("FileForge")
         self.resize(800, 600)
 
@@ -26,12 +30,33 @@ class MainWindow(QMainWindow):
         menu_bar = MenuBar(self)
         self.setMenuBar(menu_bar)
 
-        # define drag and drop zone
-        drop_zone = DropZone(self)
-        self.setCentralWidget(drop_zone)
 
-        # Quit button
+
+        # ================================================================================
+        # === MAIN WINDOW CONFIGURATION ==================================================
+        # ================================================================================
+
+        # main window container
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+
+        # main layout
+        main_layout = QVBoxLayout(central_widget)
+
+        # --------------------------------------------------------------------------------
+        # --- Components -----------------------------------------------------------------
+        # --------------------------------------------------------------------------------
+
+        # file drop zone
+        drop_zone = DropZone(self)
+
+        # quit button
         quit_btn = QPushButton("Quit")
         quit_btn.clicked.connect(lambda: QApplication.instance().exit())
 
-        #self.setCentralWidget(quit_btn)
+        # --------------------------------------------------------------------------------
+        # --- Assembly -------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
+
+        main_layout.addWidget(drop_zone)
+        main_layout.addWidget(quit_btn)
