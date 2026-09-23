@@ -8,6 +8,7 @@
 # imports
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFrame, QLabel, QPushButton, QVBoxLayout
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPixmap
 
 
 class DropZone(QFrame):
@@ -27,6 +28,7 @@ class DropZone(QFrame):
         # import files button
         import_files_button = QPushButton("Browse Files")
         import_files_button.setObjectName("importFilesButton")
+
 
         self.setLayout(QVBoxLayout())
         self.layout().addWidget(drop_zone_label)

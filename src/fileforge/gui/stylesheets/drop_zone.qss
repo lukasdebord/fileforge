@@ -2,7 +2,7 @@
 /* Color pallet: #171a2b, #211c35, #40345c, #e56b6f, #f4a261, #ffd166, #f5f1e8, #aaa4c8 */
 
 #dropZone {
-    background-color: #171a2b;
+    background-image: url("assets/drop_zone_background.jpeg");
     border: 2px dashed #e56b6f;
     border-radius: 10px;
 }
