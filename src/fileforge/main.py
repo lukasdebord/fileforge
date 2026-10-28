@@ -12,7 +12,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
-from gui.main_window import MainWindow
+from fileforge.gui.main_window import MainWindow
 
 # main function
 if __name__ == "__main__":

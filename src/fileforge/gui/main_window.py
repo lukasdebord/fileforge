@@ -10,8 +10,8 @@
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QPushButton
 from PySide6.QtCore import Qt
 
-from .menu_bar import MenuBar
-from .drop_zone import DropZone
+from fileforge.gui.menu_bar import MenuBar
+from fileforge.gui.drop_zone import DropZone
 
 # MainWindow class definition
 class MainWindow(QMainWindow):

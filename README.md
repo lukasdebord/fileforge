@@ -32,7 +32,7 @@ pip install -r requirements.txt
 
 Run the application:
 ```
-python -m fileforge
+python -m fileforge.main
 ```
 
 ## License
