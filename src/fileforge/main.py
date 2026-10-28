@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
-from fileforge.gui.main_window import MainWindow
+from fileforge.gui.main_window.main_window import MainWindow
 from fileforge.gui.rename_dialog import RenameDialog
 
 
