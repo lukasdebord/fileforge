@@ -24,8 +24,9 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
-# class definition for the rename dialog window
-# uses QDialog from PySide6.QtWidgets
+# ==================================================
+# INITIALIZATION
+# ==================================================
 class RenameDialog(QDialog):
     def __init__(self, file_path: Path, parent=None):
         super().__init__(parent)
@@ -39,11 +40,23 @@ class RenameDialog(QDialog):
         self._build_ui()
 
 
+# ==================================================
+# UI SETUP
+# ==================================================
 
-# build the user interface for the rename dialog window
+    # --- UI CONSTRUCTION ---
     def _build_ui(self):
         layout = QVBoxLayout(self)
 
+        self._build_file_info_ui(layout)
+        self._build_naming_options_ui(layout)
+        self._build_extension_ui(layout)
+        self._build_button_ui(layout)
+
+
+
+    # -- File info UI ---
+    def _build_file_info_ui(self, layout):
         layout.addWidget(QLabel("Original filename:"))
 
         # show the original filename without the extension
@@ -51,7 +64,10 @@ class RenameDialog(QDialog):
 
         layout.addWidget(self.original_file_name)
 
-        # file renaming input
+
+    # --- NAMING OPTIONS UI ---
+    def _build_naming_options_ui(self, layout):
+                # file renaming input
         rename_layout = QHBoxLayout()
 
         self.settings = QSettings("FileForge", "RenameDialog")
@@ -97,13 +113,18 @@ class RenameDialog(QDialog):
         rename_layout.addWidget(self.delete_file_name_prefix_btn)
         layout.addLayout(rename_layout)
 
-        # Show the extension separately so it stays unchanged.
+
+    # --- EXTENSION UI ---
+    def _build_extension_ui(self, layout):
         extension = self.file_path.suffix
         if extension:
             layout.addWidget(QLabel(f"Extension: {extension}"))
 
-        button_layout = QHBoxLayout()
 
+    # --- BUTTON UI ---
+    def _build_button_ui(self, layout):
+        button_layout = QHBoxLayout()
+        
         cancel_button = QPushButton("Cancel")
         rename_button = QPushButton("Rename")
         rename_button.setDefault(True)
@@ -118,30 +139,41 @@ class RenameDialog(QDialog):
         layout.addLayout(button_layout)
 
 
-    # add a new file name prefix to the combo box and save it in the settings
+    # ==================================================
+    # PREFIX SETTINGS ADDITION AND DELETION
+    # ==================================================
+
+    # --- ADD FILE NAME PREFIX ---
     def add_file_name_prefix(self):
+        # get current text from the combo box
         prefix = self.file_name_prefix.currentText().strip()
         if prefix:
+            # add prefix and save to settings
             self.file_name_prefix.addItem(prefix)
             self.settings.setValue(
                 "file_name_prefixes",
                 [self.file_name_prefix.itemText(i) for i in range(self.file_name_prefix.count())]
             )
 
-    # delete the current file name prefix from the combo box and save it in the settings
+    # --- DELETE FILE NAME PREFIX ---
     def delete_file_name_prefix(self):
+        # get the current index of the selected prefix in the combo box
         current_index = self.file_name_prefix.currentIndex()
         if current_index >= 0:
+            # delete prefix and remove from settings
             self.file_name_prefix.removeItem(current_index)
             self.settings.setValue(
                 "file_name_prefixes",
                 [self.file_name_prefix.itemText(i) for i in range(self.file_name_prefix.count())]
             )
 
-# handle the renaming of the file when the rename button is clicked
+    # ==================================================
+    # RENAME FILE ACTION
+    # ==================================================
     def rename_file(self):
         new_name = self.file_name_prefix.currentText().strip()
 
+        # check if file name is empty
         if not new_name:
             QMessageBox.warning(
                 self,
