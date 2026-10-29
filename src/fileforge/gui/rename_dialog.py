@@ -9,6 +9,10 @@
 # imports
 from pathlib import Path
 
+from PySide6.QtCore import (
+    QSettings
+)
+
 from PySide6.QtWidgets import (
     QDialog,
     QComboBox,
@@ -40,15 +44,40 @@ class RenameDialog(QDialog):
     def _build_ui(self):
         layout = QVBoxLayout(self)
 
-        layout.addWidget(QLabel("New filename:"))
+        layout.addWidget(QLabel("Original filename:"))
 
-        self.name_input = QLineEdit()
-        
-        # show original filename without the extension
-        self.name_input.setText(self.file_path.stem)
-        self.name_input.selectAll()
+        # show the original filename without the extension
+        self.original_file_name = QLabel(self.file_path.stem)
 
-        layout.addWidget(self.name_input)
+        layout.addWidget(self.original_file_name)
+
+        # file renaming input
+        rename_layout = QHBoxLayout()
+
+        self.settings = QSettings("FileForge", "RenameDialog")
+
+        self.file_name_prefix = QComboBox()
+        self.file_name_prefix.setEditable(True)
+        self.file_name_prefix.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+
+        # Define the default prefixes for the file name prefix combo box
+        DEFAULT_PREFIXES = [
+            "ITCS131",
+            "ITCS132",
+            "ITCS133",
+            ]
+
+        # Retrieve the saved prefixes from the settings, falling back to the default prefixes 
+        # if none are saved.
+        saved_prefixes = self.settings.value(
+            "file_name_prefixes",
+            DEFAULT_PREFIXES,
+            type = list)
+
+        self.file_name_prefix.addItems(saved_prefixes)
+
+        rename_layout.addWidget(self.file_name_prefix)
+        layout.addLayout(rename_layout)
 
         # Show the extension separately so it stays unchanged.
         extension = self.file_path.suffix
@@ -71,9 +100,12 @@ class RenameDialog(QDialog):
         layout.addLayout(button_layout)
 
 
+
+
+
 # handle the renaming of the file when the rename button is clicked
     def rename_file(self):
-        new_name = self.name_input.text().strip()
+        new_name = self.file_name_prefix.currentText().strip()
 
         if not new_name:
             QMessageBox.warning(
