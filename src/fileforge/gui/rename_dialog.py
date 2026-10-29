@@ -65,18 +65,36 @@ class RenameDialog(QDialog):
             "ITCS131",
             "ITCS132",
             "ITCS133",
-            ]
+        ]
+
+        # Initialize the file name prefixes in the settings if they don't exist.
+        if not self.settings.contains("file_name_prefixes"):
+            self.settings.setValue(
+                "file_name_prefixes", 
+                DEFAULT_PREFIXES
+            )
 
         # Retrieve the saved prefixes from the settings, falling back to the default prefixes 
         # if none are saved.
         saved_prefixes = self.settings.value(
             "file_name_prefixes",
-            DEFAULT_PREFIXES,
-            type = list)
+            type = list
+        )
 
         self.file_name_prefix.addItems(saved_prefixes)
 
+        # add a button to add new file name prefixes
+        self.add_file_name_prefix_btn = QPushButton("+")
+        self.add_file_name_prefix_btn.clicked.connect(self.add_file_name_prefix)
+
+        # add a button to add new file name prefixes
+        self.delete_file_name_prefix_btn = QPushButton("-")
+        self.delete_file_name_prefix_btn.clicked.connect(self.delete_file_name_prefix)
+
+
         rename_layout.addWidget(self.file_name_prefix)
+        rename_layout.addWidget(self.add_file_name_prefix_btn)
+        rename_layout.addWidget(self.delete_file_name_prefix_btn)
         layout.addLayout(rename_layout)
 
         # Show the extension separately so it stays unchanged.
@@ -100,8 +118,25 @@ class RenameDialog(QDialog):
         layout.addLayout(button_layout)
 
 
+    # add a new file name prefix to the combo box and save it in the settings
+    def add_file_name_prefix(self):
+        prefix = self.file_name_prefix.currentText().strip()
+        if prefix:
+            self.file_name_prefix.addItem(prefix)
+            self.settings.setValue(
+                "file_name_prefixes",
+                [self.file_name_prefix.itemText(i) for i in range(self.file_name_prefix.count())]
+            )
 
-
+    # delete the current file name prefix from the combo box and save it in the settings
+    def delete_file_name_prefix(self):
+        current_index = self.file_name_prefix.currentIndex()
+        if current_index >= 0:
+            self.file_name_prefix.removeItem(current_index)
+            self.settings.setValue(
+                "file_name_prefixes",
+                [self.file_name_prefix.itemText(i) for i in range(self.file_name_prefix.count())]
+            )
 
 # handle the renaming of the file when the rename button is clicked
     def rename_file(self):
