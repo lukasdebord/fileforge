@@ -11,6 +11,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QDialog,
+    QComboBox,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
@@ -42,7 +43,8 @@ class RenameDialog(QDialog):
         layout.addWidget(QLabel("New filename:"))
 
         self.name_input = QLineEdit()
-        # original filename without the extension
+        
+        # show original filename without the extension
         self.name_input.setText(self.file_path.stem)
         self.name_input.selectAll()
 

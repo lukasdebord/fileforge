@@ -30,9 +30,13 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-Run the application:
+Run the main application:
 ```
 python -m fileforge.main
+```
+Run through CLI
+```
+python -m fileforge.main --rename [file-path]
 ```
 
 ## License
