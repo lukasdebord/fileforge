@@ -31,6 +31,14 @@ class RenameDialog(QDialog):
     def __init__(self, file_path: Path, parent=None):
         super().__init__(parent)
 
+        self.settings = QSettings("FileForge", "RenameDialog")
+        self.prohibited_chars = [":", "*", "?", '"', "<", ">", "|", "/", "\\", ".", ","]
+
+        self.saved_prefixes = self.settings.value(
+            "file_name_prefixes",
+            type = list
+        )
+
         # expand the user home directory and resolve the absolute path of the file
         self.file_path = Path(file_path).expanduser().resolve()
 
@@ -91,12 +99,7 @@ class RenameDialog(QDialog):
 
         # Retrieve the saved prefixes from the settings, falling back to the default prefixes 
         # if none are saved.
-        saved_prefixes = self.settings.value(
-            "file_name_prefixes",
-            type = list
-        )
-
-        self.file_name_prefix.addItems(saved_prefixes)
+        self.file_name_prefix.addItems(self.saved_prefixes)
 
         # add a button to add new file name prefixes
         self.add_file_name_prefix_btn = QPushButton("+")
@@ -164,6 +167,15 @@ class RenameDialog(QDialog):
             )
             return
 
+        # check if the prefix contains prohibited characters
+        if any(char in prefix for char in self.prohibited_chars):
+            QMessageBox.warning(
+                self,
+                "Invalid prefix",
+                "The prefix cannot contain prohibited characters.",
+            )
+            return
+
         # check for duplicate prefixes
         if self.file_name_prefix.findText(prefix) != -1:
             QMessageBox.warning(
@@ -197,7 +209,7 @@ class RenameDialog(QDialog):
         )
 
         # Check if the current text is in the saved prefixes list.
-        if current_text not in saved_prefixes:
+        if current_text not in self.saved_prefixes:
             QMessageBox.warning(
                 self,
                 "Prefix not found",
@@ -234,22 +246,21 @@ class RenameDialog(QDialog):
             )
             return
 
-        # Prevent entering a invalid characters in filename.
-        prohibited_chars = [":", "*", "?", '"', "<", ">", "|"]
-        if any(char in new_name for char in prohibited_chars):
-            QMessageBox.warning(
-                self,
-                "Invalid filename",
-                "The filename contains prohibited characters.",
-            )
-            return
-
         # Prevent entering a path instead of just a filename.
         if "/" in new_name or "\\" in new_name:
             QMessageBox.warning(
                 self,
                 "Invalid filename",
                 "Enter a filename, not a path.",
+            )
+            return
+
+        # Prevent entering a invalid characters in filename.
+        if any(char in new_name for char in self.prohibited_chars):
+            QMessageBox.warning(
+                self,
+                "Invalid filename",
+                "The filename contains prohibited characters.",
             )
             return
 
