@@ -2,7 +2,7 @@
     rename-dialog.py -> consists of the rename dialog window for the FileForge application.
     It contains the UI elements for renaming files.
 
-    Last updated: 10/28/26
+    Last updated: 10/30/26
     Contributor: Lukas DeBord
 """
 
@@ -10,6 +10,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import (
+    QPoint,
     QSettings,
     QTimer
 )
@@ -22,8 +23,15 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QMessageBox,
-    QWidget,
+    QFrame,
 )
+
+from .prefix_fields import (
+    _PrefixDragHandle,
+    _PrefixFieldRow,
+    _PrefixFieldsArea,
+)
+
 
 # ==================================================
 # INITIALIZATION
@@ -47,6 +55,7 @@ class RenameDialog(QDialog):
 
         self.prefix_fields = []
         self.prefix_field_rows = []
+        self.drop_indicator = None
 
         # expand the user home directory and resolve the absolute path of the file
         self.file_path = Path(file_path).expanduser().resolve()
@@ -64,11 +73,18 @@ class RenameDialog(QDialog):
     # --- UI CONSTRUCTION ---
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        self.prefix_fields_layout = QVBoxLayout()
+        self.prefix_fields_area = _PrefixFieldsArea(
+            lambda: self.prefix_field_rows,
+            self._move_prefix_row_by_id,
+            self._show_drop_indicator,
+            self._clear_drop_indicator,
+        )
+        self.prefix_fields_layout = QVBoxLayout(self.prefix_fields_area)
+        self.prefix_fields_layout.setContentsMargins(0, 8, 0, 8)
 
         self._build_file_info_ui(layout)
         self._build_naming_field_ui(self.prefix_fields_layout)
-        layout.addLayout(self.prefix_fields_layout)
+        layout.addWidget(self.prefix_fields_area)
         self._build_extension_ui(layout)
         self._build_button_ui(layout)
 
@@ -100,7 +116,7 @@ class RenameDialog(QDialog):
     # --- NAMING OPTIONS UI ---
     def _build_naming_field_ui(self, layout):
         # Create a row widget to hold the prefix field and its buttons
-        row_widget = QWidget()
+        row_widget = _PrefixFieldRow(self._drop_on_row, self._show_row_drop_indicator)
         row_layout = QHBoxLayout(row_widget)
         row_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -134,11 +150,15 @@ class RenameDialog(QDialog):
             lambda _checked=False, prefix_field=field: self.delete_file_name_prefix(prefix_field)
         )
 
+        drag_handle = _PrefixDragHandle(row_widget)
+        drag_handle.clear_drop_indicator = self._clear_drop_indicator
+
         # Add the buttons to the row layout
         row_layout.addWidget(delete_prefix_field)
         row_layout.addWidget(field)
         row_layout.addWidget(add_prefix_button)
         row_layout.addWidget(delete_prefix_button)
+        row_layout.addWidget(drag_handle)
         self.prefix_field_rows.append(row_widget)
         layout.addWidget(row_widget)
 
@@ -255,6 +275,92 @@ class RenameDialog(QDialog):
         for prefix_field in self.prefix_fields:
             prefix_field.removeItem(prefix_field.findText(current_text))
         self.settings.setValue("file_name_prefixes", self.saved_prefixes)
+
+
+    # ==================================================
+    # DRAG FILE NAME PREFIX
+    # ==================================================
+    def _show_drop_indicator(self, insertion_index):
+        """Show the insertion line at a slot before, between, or after the rows."""
+        if self.drop_indicator is None:
+            self.drop_indicator = QFrame(self.prefix_fields_area)
+            self.drop_indicator.setFrameShape(QFrame.Shape.HLine)
+            self.drop_indicator.setFrameShadow(QFrame.Shadow.Sunken)
+            self.drop_indicator.setLineWidth(2)
+            self.drop_indicator.setFixedHeight(4)
+
+        rows = self.prefix_field_rows
+        if not rows:
+            return
+
+        insertion_index = max(0, min(insertion_index, len(rows)))
+        if insertion_index == 0:
+            # Use the padded top margin so the marker does not sit under the first row.
+            first_row_top = rows[0].mapTo(self.prefix_fields_area, QPoint(0, 0)).y()
+            y_position = first_row_top // 2
+        elif insertion_index == len(rows):
+            last_row_bottom = (
+                rows[-1].mapTo(self.prefix_fields_area, QPoint(0, 0)).y()
+                + rows[-1].height()
+            )
+            y_position = (last_row_bottom + self.prefix_fields_area.height()) // 2
+        else:
+            previous_bottom = (
+                rows[insertion_index - 1].mapTo(self.prefix_fields_area, QPoint(0, 0)).y()
+                + rows[insertion_index - 1].height()
+            )
+            next_top = rows[insertion_index].mapTo(self.prefix_fields_area, QPoint(0, 0)).y()
+            y_position = (previous_bottom + next_top) // 2
+
+        self.drop_indicator.setGeometry(
+            8,
+            y_position - self.drop_indicator.height() // 2,
+            max(0, self.prefix_fields_area.width() - 16),
+            self.drop_indicator.height(),
+        )
+        self.drop_indicator.show()
+        self.drop_indicator.raise_()
+
+    def _show_row_drop_indicator(self, target_row, insertion_after):
+        target_index = self.prefix_field_rows.index(target_row)
+        self._show_drop_indicator(target_index + int(insertion_after))
+
+    def _clear_drop_indicator(self):
+        if self.drop_indicator is not None:
+            self.drop_indicator.hide()
+
+    def _drop_on_row(self, source_row_id, target_row, insertion_after):
+        target_index = self.prefix_field_rows.index(target_row)
+        self._move_prefix_row_by_id(source_row_id, target_index + int(insertion_after))
+
+    def _move_prefix_row_by_id(self, source_row_id, insertion_index):
+        self._clear_drop_indicator()
+        source_row = next(
+            (row for row in self.prefix_field_rows if id(row) == source_row_id),
+            None,
+        )
+        if source_row is not None:
+            self.move_prefix_row(source_row, insertion_index)
+
+    def move_prefix_row(self, source_row, insertion_index):
+        """Reorder the layout and its parallel lists to keep filename order in sync."""
+        source_index = self.prefix_field_rows.index(source_row)
+        insertion_index = max(0, min(insertion_index, len(self.prefix_field_rows)))
+        # These two slots represent no movement: immediately before or after itself.
+        if insertion_index in (source_index, source_index + 1):
+            return
+
+        row = self.prefix_field_rows.pop(source_index)
+        field = self.prefix_fields.pop(source_index)
+
+        if source_index < insertion_index:
+            insertion_index -= 1
+
+        self.prefix_field_rows.insert(insertion_index, row)
+        self.prefix_fields.insert(insertion_index, field)
+
+        self.prefix_fields_layout.removeWidget(row)
+        self.prefix_fields_layout.insertWidget(insertion_index, row)
 
     # ==================================================
     # RENAME FILE ACTION
