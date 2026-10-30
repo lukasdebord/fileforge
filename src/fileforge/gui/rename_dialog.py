@@ -10,7 +10,8 @@
 from pathlib import Path
 
 from PySide6.QtCore import (
-    QSettings
+    QSettings,
+    QTimer
 )
 
 from PySide6.QtWidgets import (
@@ -19,9 +20,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QPushButton,
     QMessageBox,
+    QWidget,
 )
 
 # ==================================================
@@ -34,10 +35,18 @@ class RenameDialog(QDialog):
         self.settings = QSettings("FileForge", "RenameDialog")
         self.prohibited_chars = [":", "*", "?", '"', "<", ">", "|", "/", "\\", ".", ","]
 
+        # Initialize default filename prefixes if they don't exist in settings
+        default_prefixes = ["ITCS131", "ITCS132", "ITCS133"]
+        if not self.settings.contains("file_name_prefixes"):
+            self.settings.setValue("file_name_prefixes", default_prefixes)
+
         self.saved_prefixes = self.settings.value(
             "file_name_prefixes",
-            type = list
-        )
+            type=list,
+        ) or []
+
+        self.prefix_fields = []
+        self.prefix_field_rows = []
 
         # expand the user home directory and resolve the absolute path of the file
         self.file_path = Path(file_path).expanduser().resolve()
@@ -55,9 +64,11 @@ class RenameDialog(QDialog):
     # --- UI CONSTRUCTION ---
     def _build_ui(self):
         layout = QVBoxLayout(self)
+        self.prefix_fields_layout = QVBoxLayout()
 
         self._build_file_info_ui(layout)
-        self._build_naming_options_ui(layout)
+        self._build_naming_field_ui(self.prefix_fields_layout)
+        layout.addLayout(self.prefix_fields_layout)
         self._build_extension_ui(layout)
         self._build_button_ui(layout)
 
@@ -72,56 +83,58 @@ class RenameDialog(QDialog):
 
         layout.addWidget(self.original_file_name)
 
+        # add and delete buttons for filename prefix fields
+        add_prefix_field = QPushButton("+")
+        add_prefix_field.setFixedWidth(30)
+        add_prefix_field.clicked.connect(self.add_file_name_prefix_field)
+
+        delete_prefix_field = QPushButton("-")
+        delete_prefix_field.setFixedWidth(30)
+        delete_prefix_field.clicked.connect(self.delete_file_name_prefix_field)
+
+        prefix_layout_buttons = QHBoxLayout()
+
+        # heading (preferably remove new line to use margin instead)
+        prefix_layout_buttons.addWidget(QLabel("\nFilename prefixes"))
+        prefix_layout_buttons.addWidget(add_prefix_field)
+        prefix_layout_buttons.addWidget(delete_prefix_field)
+
+        layout.addLayout(prefix_layout_buttons)
+
 
     # --- NAMING OPTIONS UI ---
-    def _build_naming_options_ui(self, layout):
-        # file renaming input
+    def _build_naming_field_ui(self, layout):
+        is_additional_field = bool(self.prefix_fields)
+        field = QComboBox()
+        field.setEditable(True)
+        field.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        field.addItems(self.saved_prefixes)
+        if is_additional_field:
+            field.setCurrentIndex(-1)
+        self.prefix_fields.append(field)
 
-        self.settings = QSettings("FileForge", "RenameDialog")
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.addWidget(field)
 
-        self.file_name_prefix = QComboBox()
-        self.file_name_prefix.setEditable(True)
-        self.file_name_prefix.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        # Add and delete buttons for this prefix field
+        add_prefix_button = QPushButton("+")
+        add_prefix_button.setFixedWidth(30)
+        add_prefix_button.clicked.connect(
+            lambda _checked=False, prefix_field=field: self.add_file_name_prefix(prefix_field)
+        )
 
-        # Define the default prefixes for the file name prefix combo box
-        DEFAULT_PREFIXES = [
-            "ITCS131",
-            "ITCS132",
-            "ITCS133",
-        ]
+        delete_prefix_button = QPushButton("-")
+        delete_prefix_button.setFixedWidth(30)
+        delete_prefix_button.clicked.connect(
+            lambda _checked=False, prefix_field=field: self.delete_file_name_prefix(prefix_field)
+        )
 
-        # Initialize the file name prefixes in the settings if they don't exist.
-        if not self.settings.contains("file_name_prefixes"):
-            self.settings.setValue(
-                "file_name_prefixes", 
-                DEFAULT_PREFIXES
-            )
-
-        # Retrieve the saved prefixes from the settings, falling back to the default prefixes 
-        # if none are saved.
-        self.file_name_prefix.addItems(self.saved_prefixes)
-
-        # add a button to add new file name prefixes
-        self.add_file_name_prefix_btn = QPushButton("+")
-        self.add_file_name_prefix_btn.setFixedWidth(30)
-        self.add_file_name_prefix_btn.clicked.connect(self.add_file_name_prefix)
-
-        # add a button to add new file name prefixes
-        self.delete_file_name_prefix_btn = QPushButton("-")
-        self.delete_file_name_prefix_btn.setFixedWidth(30)
-        self.delete_file_name_prefix_btn.clicked.connect(self.delete_file_name_prefix)
-
-        # align the file name prefix combo box and the add/delete buttons horizontally
-        rename_layout = QHBoxLayout()
-
-        # stack add and delete buttons vertically
-        add_delete_prefix_layout = QVBoxLayout()
-
-        rename_layout.addWidget(self.file_name_prefix)
-        add_delete_prefix_layout.addWidget(self.add_file_name_prefix_btn)
-        add_delete_prefix_layout.addWidget(self.delete_file_name_prefix_btn)
-        rename_layout.addLayout(add_delete_prefix_layout)
-        layout.addLayout(rename_layout)
+        row_layout.addWidget(add_prefix_button)
+        row_layout.addWidget(delete_prefix_button)
+        self.prefix_field_rows.append(row_widget)
+        layout.addWidget(row_widget)
 
 
     # --- EXTENSION UI ---
@@ -150,13 +163,34 @@ class RenameDialog(QDialog):
 
 
     # ==================================================
+    # PREFIX FIELD ADDITION AND DELETION
+    # ==================================================
+
+    # --- ADD FILE NAME PREFIX FIELD ---
+    def add_file_name_prefix_field(self):
+        self._build_naming_field_ui(self.prefix_fields_layout)
+
+    # --- DELETE FILE NAME PREFIX FIELD ---
+    def delete_file_name_prefix_field(self):
+        if len(self.prefix_field_rows) <= 1:
+            return
+
+        row = self.prefix_field_rows.pop()
+        self.prefix_fields.pop()
+        self.prefix_fields_layout.removeWidget(row)
+        row.deleteLater()
+        self.adjustSize()
+        QTimer.singleShot(0, self.adjustSize)
+
+
+    # ==================================================
     # PREFIX SETTINGS ADDITION AND DELETION
     # ==================================================
 
     # --- ADD FILE NAME PREFIX ---
-    def add_file_name_prefix(self):
+    def add_file_name_prefix(self, field):
         # get current text from the combo box
-        prefix = self.file_name_prefix.currentText().strip()
+        prefix = field.currentText().strip()
 
         # check if the prefix is empty
         if not prefix:
@@ -177,7 +211,7 @@ class RenameDialog(QDialog):
             return
 
         # check for duplicate prefixes
-        if self.file_name_prefix.findText(prefix) != -1:
+        if prefix in self.saved_prefixes:
             QMessageBox.warning(
                 self,
                 "Duplicate prefix",
@@ -185,28 +219,20 @@ class RenameDialog(QDialog):
             )
             return
 
-        if prefix:
-            # add prefix and save to settings
-            self.file_name_prefix.addItem(prefix)
-            self.settings.setValue(
-                "file_name_prefixes",
-                [self.file_name_prefix.itemText(i) for i in range(self.file_name_prefix.count())]
-            )
+        self.saved_prefixes.append(prefix)
+        for prefix_field in self.prefix_fields:
+            prefix_field.addItem(prefix)
+        self.settings.setValue("file_name_prefixes", self.saved_prefixes)
 
     # --- DELETE FILE NAME PREFIX ---
-    def delete_file_name_prefix(self):
+    def delete_file_name_prefix(self, field):
         # Get the current index and text.
-        current_index = self.file_name_prefix.currentIndex()
-        current_text = self.file_name_prefix.currentText()
+        current_index = field.currentIndex()
+        current_text = field.currentText()
 
         # Check that the selected prefix is saved.
         if current_index < 0:
             return
-
-        saved_prefixes = self.settings.value(
-            "file_name_prefixes",
-            type=list
-        )
 
         # Check if the current text is in the saved prefixes list.
         if current_text not in self.saved_prefixes:
@@ -217,25 +243,21 @@ class RenameDialog(QDialog):
             )
             return
 
-        # Remove the prefix from the combo box.
-        self.file_name_prefix.removeItem(current_index)
-
-        # Save the updated list.
-        updated_prefixes = [
-            self.file_name_prefix.itemText(i)
-            for i in range(self.file_name_prefix.count())
-        ]
-
-        self.settings.setValue(
-            "file_name_prefixes",
-            updated_prefixes
-        )
+        self.saved_prefixes.remove(current_text)
+        for prefix_field in self.prefix_fields:
+            prefix_field.removeItem(prefix_field.findText(current_text))
+        self.settings.setValue("file_name_prefixes", self.saved_prefixes)
 
     # ==================================================
     # RENAME FILE ACTION
     # ==================================================
     def rename_file(self):
-        new_name = self.file_name_prefix.currentText().strip()
+        prefixes = [
+            field.currentText().strip()
+            for field in self.prefix_fields
+            if field.currentText().strip()
+        ]
+        new_name = "_".join(prefixes)
 
         # check if file name is empty
         if not new_name:
