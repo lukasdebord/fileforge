@@ -88,22 +88,23 @@ class RenameDialog(QDialog):
         add_prefix_field.setFixedWidth(30)
         add_prefix_field.clicked.connect(self.add_file_name_prefix_field)
 
-        delete_prefix_field = QPushButton("-")
-        delete_prefix_field.setFixedWidth(30)
-        delete_prefix_field.clicked.connect(self.delete_file_name_prefix_field)
-
         prefix_layout_buttons = QHBoxLayout()
 
         # heading (preferably remove new line to use margin instead)
         prefix_layout_buttons.addWidget(QLabel("\nFilename prefixes"))
         prefix_layout_buttons.addWidget(add_prefix_field)
-        prefix_layout_buttons.addWidget(delete_prefix_field)
 
         layout.addLayout(prefix_layout_buttons)
 
 
     # --- NAMING OPTIONS UI ---
     def _build_naming_field_ui(self, layout):
+        # Create a row widget to hold the prefix field and its buttons
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Initialize the prefix field row list if it doesn't exist
         is_additional_field = bool(self.prefix_fields)
         field = QComboBox()
         field.setEditable(True)
@@ -113,10 +114,12 @@ class RenameDialog(QDialog):
             field.setCurrentIndex(-1)
         self.prefix_fields.append(field)
 
-        row_widget = QWidget()
-        row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.addWidget(field)
+        # create a delete button for the prefix field
+        delete_prefix_field = QPushButton("x")
+        delete_prefix_field.setFixedWidth(30)
+        delete_prefix_field.clicked.connect(
+            lambda _checked=False, row=row_widget, prefix_field=field: 
+                self.delete_file_name_prefix_field(row, prefix_field))
 
         # Add and delete buttons for this prefix field
         add_prefix_button = QPushButton("+")
@@ -131,6 +134,9 @@ class RenameDialog(QDialog):
             lambda _checked=False, prefix_field=field: self.delete_file_name_prefix(prefix_field)
         )
 
+        # Add the buttons to the row layout
+        row_layout.addWidget(delete_prefix_field)
+        row_layout.addWidget(field)
         row_layout.addWidget(add_prefix_button)
         row_layout.addWidget(delete_prefix_button)
         self.prefix_field_rows.append(row_widget)
@@ -171,12 +177,14 @@ class RenameDialog(QDialog):
         self._build_naming_field_ui(self.prefix_fields_layout)
 
     # --- DELETE FILE NAME PREFIX FIELD ---
-    def delete_file_name_prefix_field(self):
-        if len(self.prefix_field_rows) <= 1:
+    def delete_file_name_prefix_field(self, row, prefix_field):
+        if len(self.prefix_field_rows) <= 0:
             return
 
-        row = self.prefix_field_rows.pop()
-        self.prefix_fields.pop()
+        index = self.prefix_field_rows.index(row)
+        self.prefix_field_rows.pop(index)
+        self.prefix_fields.pop(index)
+ 
         self.prefix_fields_layout.removeWidget(row)
         row.deleteLater()
         self.adjustSize()
