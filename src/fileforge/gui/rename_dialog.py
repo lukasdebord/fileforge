@@ -67,8 +67,7 @@ class RenameDialog(QDialog):
 
     # --- NAMING OPTIONS UI ---
     def _build_naming_options_ui(self, layout):
-                # file renaming input
-        rename_layout = QHBoxLayout()
+        # file renaming input
 
         self.settings = QSettings("FileForge", "RenameDialog")
 
@@ -101,16 +100,24 @@ class RenameDialog(QDialog):
 
         # add a button to add new file name prefixes
         self.add_file_name_prefix_btn = QPushButton("+")
+        self.add_file_name_prefix_btn.setFixedWidth(30)
         self.add_file_name_prefix_btn.clicked.connect(self.add_file_name_prefix)
 
         # add a button to add new file name prefixes
         self.delete_file_name_prefix_btn = QPushButton("-")
+        self.delete_file_name_prefix_btn.setFixedWidth(30)
         self.delete_file_name_prefix_btn.clicked.connect(self.delete_file_name_prefix)
 
+        # align the file name prefix combo box and the add/delete buttons horizontally
+        rename_layout = QHBoxLayout()
+
+        # stack add and delete buttons vertically
+        add_delete_prefix_layout = QVBoxLayout()
 
         rename_layout.addWidget(self.file_name_prefix)
-        rename_layout.addWidget(self.add_file_name_prefix_btn)
-        rename_layout.addWidget(self.delete_file_name_prefix_btn)
+        add_delete_prefix_layout.addWidget(self.add_file_name_prefix_btn)
+        add_delete_prefix_layout.addWidget(self.delete_file_name_prefix_btn)
+        rename_layout.addLayout(add_delete_prefix_layout)
         layout.addLayout(rename_layout)
 
 
@@ -147,6 +154,25 @@ class RenameDialog(QDialog):
     def add_file_name_prefix(self):
         # get current text from the combo box
         prefix = self.file_name_prefix.currentText().strip()
+
+        # check if the prefix is empty
+        if not prefix:
+            QMessageBox.warning(
+                self,
+                "Invalid prefix",
+                "The prefix cannot be empty.",
+            )
+            return
+
+        # check for duplicate prefixes
+        if self.file_name_prefix.findText(prefix) != -1:
+            QMessageBox.warning(
+                self,
+                "Duplicate prefix",
+                "This prefix already exists.",
+            )
+            return
+
         if prefix:
             # add prefix and save to settings
             self.file_name_prefix.addItem(prefix)
@@ -157,15 +183,41 @@ class RenameDialog(QDialog):
 
     # --- DELETE FILE NAME PREFIX ---
     def delete_file_name_prefix(self):
-        # get the current index of the selected prefix in the combo box
+        # Get the current index and text.
         current_index = self.file_name_prefix.currentIndex()
-        if current_index >= 0:
-            # delete prefix and remove from settings
-            self.file_name_prefix.removeItem(current_index)
-            self.settings.setValue(
-                "file_name_prefixes",
-                [self.file_name_prefix.itemText(i) for i in range(self.file_name_prefix.count())]
+        current_text = self.file_name_prefix.currentText()
+
+        # Check that the selected prefix is saved.
+        if current_index < 0:
+            return
+
+        saved_prefixes = self.settings.value(
+            "file_name_prefixes",
+            type=list
+        )
+
+        # Check if the current text is in the saved prefixes list.
+        if current_text not in saved_prefixes:
+            QMessageBox.warning(
+                self,
+                "Prefix not found",
+                "This prefix is not saved.",
             )
+            return
+
+        # Remove the prefix from the combo box.
+        self.file_name_prefix.removeItem(current_index)
+
+        # Save the updated list.
+        updated_prefixes = [
+            self.file_name_prefix.itemText(i)
+            for i in range(self.file_name_prefix.count())
+        ]
+
+        self.settings.setValue(
+            "file_name_prefixes",
+            updated_prefixes
+        )
 
     # ==================================================
     # RENAME FILE ACTION
