@@ -34,10 +34,33 @@ Run the main application:
 ```
 python -m fileforge.main
 ```
+
 Run through CLI
 ```
 python -m fileforge.main --rename [file-path]
 ```
+
+Set up build
+```
+python -m PyInstaller --clean FileForge.spce
+```
+
+MacOS: If you are MacOS you need to add a quick action to use File Forge on any file type
+1. Open Automater and create a new document
+2. Click Quick Action
+3. Set Workflow recieves current files or folders in Finder.app
+4. Add Run Shell Script
+5. Set Pass Input: to as arguments
+5. Paste into the script and set location of build in <build-path>
+```
+for file in "$@"; do
+    /usr/bin/open -n -a "<build-path>" --args --rename "$file"
+done
+```
+If you have installed the build into your applications folder you can copy Rename with File Forge.workflow
+into ~/Library/Services
+
+6. Save it with command + s and name it Rename with FileForge
 
 ## License
 This project is currently for personal development and experience.
