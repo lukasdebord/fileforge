@@ -44,7 +44,7 @@ python -m fileforge.main --rename [file-path]
 
 Set up build
 ```
-python -m PyInstaller --clean FileForge.spce
+python -m PyInstaller --clean FileForge.spec
 ```
 ### MacOS
 If you are MacOS you need to add a quick action to use File Forge on any file type
