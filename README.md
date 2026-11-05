@@ -9,6 +9,12 @@ FileForge is a personal project I am working on as a computer science major at t
 - Basic desktop application window
 - Support for custom Qt stylesheet (.qss) files
 - Initial drag-and-drop interface
+- Compose filenames from class, separator, date, document type, and custom fields
+
+Each filename component row has a group selector. Class, document type, and
+custom values can be entered and saved; separator rows choose `_`, `-`, or a
+space; date rows insert today's date in the selected format. Reorder rows to
+control the resulting filename.
 
 ## Technologies
 - Python3

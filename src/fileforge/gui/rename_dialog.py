@@ -7,6 +7,7 @@
 """
 
 # imports
+from datetime import date
 from pathlib import Path
 
 from PySide6.QtCore import (
@@ -32,6 +33,18 @@ from .prefix_fields import (
     _PrefixFieldsArea,
 )
 
+_FIELD_GROUPS = ("Class", "Separator", "Date", "Document type", "Custom")
+_SEPARATORS = (
+    ("Underscore (_)", "_"),
+    ("Hyphen (-)", "-"),
+    ("Space", " "),
+)
+_DATE_FORMATS = (
+    ("YYYY-MM-DD", "%Y-%m-%d"),
+    ("YYYYMMDD", "%Y%m%d"),
+    ("MM-DD-YYYY", "%m-%d-%Y"),
+)
+
 
 # ==================================================
 # INITIALIZATION
@@ -48,12 +61,23 @@ class RenameDialog(QDialog):
         if not self.settings.contains("file_name_prefixes"):
             self.settings.setValue("file_name_prefixes", default_prefixes)
 
-        self.saved_prefixes = self.settings.value(
-            "file_name_prefixes",
-            type=list,
-        ) or []
+        self.saved_values = {
+            "Class": self.settings.value(
+                "file_name_prefixes",
+                type=list,
+            ) or [],
+            "Document type": self.settings.value(
+                "file_name_document_types",
+                type=list,
+            ) or [],
+            "Custom": self.settings.value(
+                "file_name_custom_values",
+                type=list,
+            ) or [],
+        }
 
         self.prefix_fields = []
+        self.prefix_groups = []
         self.prefix_field_rows = []
         self.drop_indicator = None
 
@@ -64,7 +88,7 @@ class RenameDialog(QDialog):
         ]
 
         self.setWindowTitle("Rename with FileForge")
-        self.setMinimumWidth(360)
+        self.setMinimumWidth(460)
 
         self._build_ui()
 
@@ -106,7 +130,7 @@ class RenameDialog(QDialog):
 
         layout.addWidget(self.original_file_name)
 
-        # add and delete buttons for filename prefix fields
+        # add and delete buttons for filename components
         add_prefix_field = QPushButton("+")
         add_prefix_field.setFixedWidth(30)
         add_prefix_field.clicked.connect(self.add_file_name_prefix_field)
@@ -115,7 +139,7 @@ class RenameDialog(QDialog):
         prefix_layout_buttons = QHBoxLayout()
 
         # heading (preferably remove new line to use margin instead)
-        prefix_layout_buttons.addWidget(QLabel("\nFilename prefixes"))
+        prefix_layout_buttons.addWidget(QLabel("\nFilename components"))
         prefix_layout_buttons.addWidget(add_prefix_field)
         layout.addLayout(prefix_layout_buttons)
 
@@ -128,33 +152,52 @@ class RenameDialog(QDialog):
         row_layout.setContentsMargins(0, 0, 0, 0)
 
         # Initialize the prefix field row list if it doesn't exist
-        is_additional_field = bool(self.prefix_fields)
+        group_field = QComboBox()
+        group_field.addItems(_FIELD_GROUPS)
+        group_field.setFixedWidth(110)
+
         field = QComboBox()
-        field.setEditable(True)
-        field.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        field.addItems(self.saved_prefixes)
+        group_field.currentTextChanged.connect(
+            lambda group, value_field=field: self._configure_field(value_field, group)
+        )
+        self._configure_field(field, group_field.currentText())
+
+        is_additional_field = bool(self.prefix_fields)
         if is_additional_field:
             field.setCurrentIndex(-1)
         self.prefix_fields.append(field)
+        self.prefix_groups.append(group_field)
 
         # create a delete button for the prefix field
         delete_prefix_field = QPushButton("x")
         delete_prefix_field.setFixedWidth(30)
         delete_prefix_field.clicked.connect(
-            lambda _checked=False, row=row_widget, prefix_field=field: 
-                self.delete_file_name_prefix_field(row, prefix_field))
+            lambda _checked=False, row=row_widget:
+                self.delete_file_name_prefix_field(row)
+        )
 
         # Add and delete buttons for this prefix field
         add_prefix_button = QPushButton("+")
         add_prefix_button.setFixedWidth(30)
         add_prefix_button.clicked.connect(
-            lambda _checked=False, prefix_field=field: self.add_file_name_prefix(prefix_field)
+            lambda _checked=False, prefix_field=field, category=group_field:
+                self.save_group_value(prefix_field, category)
         )
 
         delete_prefix_button = QPushButton("-")
         delete_prefix_button.setFixedWidth(30)
         delete_prefix_button.clicked.connect(
-            lambda _checked=False, prefix_field=field: self.delete_file_name_prefix(prefix_field)
+            lambda _checked=False, prefix_field=field, category=group_field:
+                self.delete_group_value(prefix_field, category)
+        )
+        group_field.currentTextChanged.connect(
+            lambda group, save_button=add_prefix_button, delete_button=delete_prefix_button:
+                self._set_value_buttons_enabled(group, save_button, delete_button)
+        )
+        self._set_value_buttons_enabled(
+            group_field.currentText(),
+            add_prefix_button,
+            delete_prefix_button,
         )
 
         drag_handle = _PrefixDragHandle(row_widget)
@@ -162,6 +205,7 @@ class RenameDialog(QDialog):
 
         # Add the buttons to the row layout
         row_layout.addWidget(delete_prefix_field)
+        row_layout.addWidget(group_field)
         row_layout.addWidget(field)
         row_layout.addWidget(add_prefix_button)
         row_layout.addWidget(delete_prefix_button)
@@ -199,18 +243,48 @@ class RenameDialog(QDialog):
     # PREFIX FIELD ADDITION AND DELETION
     # ==================================================
 
+    def _configure_field(self, field, group):
+        field.blockSignals(True)
+        field.clear()
+        field.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+
+        if group == "Separator":
+            field.setEditable(False)
+            for label, separator in _SEPARATORS:
+                field.addItem(label, separator)
+            field.setCurrentIndex(0)
+        elif group == "Date":
+            field.setEditable(False)
+            for label, date_format in _DATE_FORMATS:
+                field.addItem(label, date_format)
+            field.setCurrentIndex(0)
+        else:
+            field.setEditable(True)
+            field.addItems(self.saved_values.get(group, []))
+            if field.count() == 0:
+                field.setCurrentIndex(-1)
+
+        field.blockSignals(False)
+
+    @staticmethod
+    def _set_value_buttons_enabled(group, save_button, delete_button):
+        enabled = group in ("Class", "Document type", "Custom")
+        save_button.setEnabled(enabled)
+        delete_button.setEnabled(enabled)
+
     # --- ADD FILE NAME PREFIX FIELD ---
     def add_file_name_prefix_field(self):
         self._build_naming_field_ui(self.prefix_fields_layout)
 
     # --- DELETE FILE NAME PREFIX FIELD ---
-    def delete_file_name_prefix_field(self, row, prefix_field):
+    def delete_file_name_prefix_field(self, row):
         if len(self.prefix_field_rows) <= 0:
             return
 
         index = self.prefix_field_rows.index(row)
         self.prefix_field_rows.pop(index)
         self.prefix_fields.pop(index)
+        self.prefix_groups.pop(index)
  
         self.prefix_fields_layout.removeWidget(row)
         row.deleteLater()
@@ -219,20 +293,28 @@ class RenameDialog(QDialog):
 
 
     # ==================================================
-    # PREFIX SETTINGS ADDITION AND DELETION
+    # SAVED GROUP VALUE MANAGEMENT
     # ==================================================
 
-    # --- ADD FILE NAME PREFIX ---
-    def add_file_name_prefix(self, field):
-        # get current text from the combo box
+    # --- SAVE GROUP VALUE ---
+    def _settings_key_for_group(self, group):
+        return {
+            "Class": "file_name_prefixes",
+            "Document type": "file_name_document_types",
+            "Custom": "file_name_custom_values",
+        }[group]
+
+    def save_group_value(self, field, group_field):
+        # Get the current text from the combo box.
         prefix = field.currentText().strip()
+        group = group_field.currentText()
 
         # check if the prefix is empty
         if not prefix:
             QMessageBox.warning(
                 self,
-                "Invalid prefix",
-                "The prefix cannot be empty.",
+                "Invalid value",
+                "The value cannot be empty.",
             )
             return
 
@@ -240,48 +322,53 @@ class RenameDialog(QDialog):
         if any(char in prefix for char in self.prohibited_chars):
             QMessageBox.warning(
                 self,
-                "Invalid prefix",
-                "The prefix cannot contain prohibited characters.",
+                "Invalid value",
+                "The value contains prohibited characters.",
             )
             return
 
         # check for duplicate prefixes
-        if prefix in self.saved_prefixes:
+        saved_values = self.saved_values[group]
+        if prefix in saved_values:
             QMessageBox.warning(
                 self,
-                "Duplicate prefix",
-                "This prefix already exists.",
+                "Duplicate value",
+                "This value is already saved.",
             )
             return
 
-        self.saved_prefixes.append(prefix)
-        for prefix_field in self.prefix_fields:
-            prefix_field.addItem(prefix)
-        self.settings.setValue("file_name_prefixes", self.saved_prefixes)
+        saved_values.append(prefix)
+        for prefix_field, prefix_group in zip(self.prefix_fields, self.prefix_groups):
+            if prefix_group.currentText() == group:
+                prefix_field.addItem(prefix)
+        self.settings.setValue(self._settings_key_for_group(group), saved_values)
 
-    # --- DELETE FILE NAME PREFIX ---
-    def delete_file_name_prefix(self, field):
+    # --- DELETE GROUP VALUE ---
+    def delete_group_value(self, field, group_field):
         # Get the current index and text.
         current_index = field.currentIndex()
         current_text = field.currentText()
+        group = group_field.currentText()
 
-        # Check that the selected prefix is saved.
+        # Only saved values can be removed from the list.
         if current_index < 0:
             return
 
-        # Check if the current text is in the saved prefixes list.
-        if current_text not in self.saved_prefixes:
+        # Check if the current text is in the saved values list.
+        saved_values = self.saved_values[group]
+        if current_text not in saved_values:
             QMessageBox.warning(
                 self,
-                "Prefix not found",
-                "This prefix is not saved.",
+                "Value not found",
+                "This value is not saved.",
             )
             return
 
-        self.saved_prefixes.remove(current_text)
-        for prefix_field in self.prefix_fields:
-            prefix_field.removeItem(prefix_field.findText(current_text))
-        self.settings.setValue("file_name_prefixes", self.saved_prefixes)
+        saved_values.remove(current_text)
+        for prefix_field, prefix_group in zip(self.prefix_fields, self.prefix_groups):
+            if prefix_group.currentText() == group:
+                prefix_field.removeItem(prefix_field.findText(current_text))
+        self.settings.setValue(self._settings_key_for_group(group), saved_values)
 
 
     # ==================================================
@@ -359,12 +446,14 @@ class RenameDialog(QDialog):
 
         row = self.prefix_field_rows.pop(source_index)
         field = self.prefix_fields.pop(source_index)
+        group = self.prefix_groups.pop(source_index)
 
         if source_index < insertion_index:
             insertion_index -= 1
 
         self.prefix_field_rows.insert(insertion_index, row)
         self.prefix_fields.insert(insertion_index, field)
+        self.prefix_groups.insert(insertion_index, group)
 
         self.prefix_fields_layout.removeWidget(row)
         self.prefix_fields_layout.insertWidget(insertion_index, row)
@@ -373,12 +462,24 @@ class RenameDialog(QDialog):
     # RENAME FILE ACTION
     # ==================================================
     def rename_file(self):
-        prefixes = [
-            field.currentText().strip()
-            for field in self.prefix_fields
-            if field.currentText().strip()
-        ]
-        new_name = "_".join(prefixes)
+        name_parts = []
+        pending_separator = ""
+        for group_field, value_field in zip(self.prefix_groups, self.prefix_fields):
+            group = group_field.currentText()
+            if group == "Separator":
+                if name_parts:
+                    pending_separator = value_field.currentData()
+                continue
+            if group == "Date":
+                value = date.today().strftime(value_field.currentData())
+            else:
+                value = value_field.currentText().strip()
+            if value:
+                if name_parts:
+                    name_parts.append(pending_separator)
+                name_parts.append(value)
+                pending_separator = ""
+        new_name = "".join(name_parts)
 
         # check if file name is empty
         if not new_name:
