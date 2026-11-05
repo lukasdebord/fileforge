@@ -16,6 +16,10 @@ custom values can be entered and saved; separator rows choose `_`, `-`, or a
 space; date rows insert today's date in the selected format. Reorder rows to
 control the resulting filename.
 
+Use the template controls to save the current ordered fields as a named
+template, select a template to apply it, update its fields from the current
+configuration, rename it, or delete it.
+
 ## Technologies
 - Python3
 - PySide6

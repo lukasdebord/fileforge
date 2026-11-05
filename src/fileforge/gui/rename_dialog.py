@@ -7,6 +7,7 @@
 """
 
 # imports
+import json
 from datetime import date
 from pathlib import Path
 
@@ -25,6 +26,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QMessageBox,
     QFrame,
+    QInputDialog,
 )
 
 from .prefix_fields import (
@@ -75,6 +77,7 @@ class RenameDialog(QDialog):
                 type=list,
             ) or [],
         }
+        self.templates = self._load_templates()
 
         self.prefix_fields = []
         self.prefix_groups = []
@@ -91,6 +94,7 @@ class RenameDialog(QDialog):
         self.setMinimumWidth(460)
 
         self._build_ui()
+        self._restore_selected_template()
 
 
 # ==================================================
@@ -129,6 +133,34 @@ class RenameDialog(QDialog):
         )
 
         layout.addWidget(self.original_file_name)
+
+        template_layout = QHBoxLayout()
+        template_layout.addWidget(QLabel("Template:"))
+        self.template_selector = QComboBox()
+        self.template_selector.addItem("-- Select template --")
+        self.template_selector.addItems(self.templates)
+        self.template_selector.currentTextChanged.connect(
+            self._on_template_selected
+        )
+        template_layout.addWidget(self.template_selector, 1)
+
+        save_template_button = QPushButton("Save as")
+        save_template_button.clicked.connect(self.save_template_as)
+        template_layout.addWidget(save_template_button)
+
+        self.update_template_button = QPushButton("Update")
+        self.update_template_button.clicked.connect(self.update_template)
+        template_layout.addWidget(self.update_template_button)
+
+        self.rename_template_button = QPushButton("Rename")
+        self.rename_template_button.clicked.connect(self.rename_template)
+        template_layout.addWidget(self.rename_template_button)
+
+        self.delete_template_button = QPushButton("Delete")
+        self.delete_template_button.clicked.connect(self.delete_template)
+        template_layout.addWidget(self.delete_template_button)
+
+        layout.addLayout(template_layout)
 
         # add and delete buttons for filename components
         add_prefix_field = QPushButton("+")
@@ -237,6 +269,199 @@ class RenameDialog(QDialog):
         button_layout.addWidget(rename_button)
 
         layout.addLayout(button_layout)
+
+    def _load_templates(self):
+        stored_templates = self.settings.value("file_name_templates", "{}")
+        try:
+            templates = json.loads(stored_templates)
+        except (json.JSONDecodeError, TypeError) as error:
+            QMessageBox.warning(
+                self,
+                "Templates unavailable",
+                f"Saved templates could not be loaded:\n{error}",
+            )
+            return {}
+
+        if not isinstance(templates, dict):
+            QMessageBox.warning(
+                self,
+                "Templates unavailable",
+                "Saved templates have an invalid format.",
+            )
+            return {}
+
+        valid_templates = {}
+        for name, fields in templates.items():
+            if (
+                isinstance(name, str)
+                and name.strip()
+                and isinstance(fields, list)
+                and all(
+                    isinstance(item, dict)
+                    and item.get("group") in _FIELD_GROUPS
+                    and isinstance(item.get("value"), str)
+                    for item in fields
+                )
+            ):
+                valid_templates[name] = fields
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Templates unavailable",
+                    f"Saved template '{name}' has an invalid format.",
+                )
+
+        return valid_templates
+
+    def _persist_templates(self):
+        self.settings.setValue(
+            "file_name_templates",
+            json.dumps(self.templates),
+        )
+
+    def _restore_selected_template(self):
+        selected_name = self.settings.value("selected_file_name_template", "")
+        index = self.template_selector.findText(selected_name)
+        if index > 0:
+            self.template_selector.setCurrentIndex(index)
+        else:
+            self._update_template_buttons()
+
+    def _on_template_selected(self, template_name):
+        if template_name in self.templates:
+            self._apply_template(template_name)
+            self.settings.setValue("selected_file_name_template", template_name)
+        else:
+            self.settings.remove("selected_file_name_template")
+        self._update_template_buttons()
+
+    def _update_template_buttons(self):
+        selected = self.template_selector.currentText() in self.templates
+        self.update_template_button.setEnabled(selected)
+        self.rename_template_button.setEnabled(selected)
+        self.delete_template_button.setEnabled(selected)
+
+    def _capture_template_fields(self):
+        fields = []
+        for group_field, value_field in zip(self.prefix_groups, self.prefix_fields):
+            group = group_field.currentText()
+            value = (
+                value_field.currentData()
+                if group in ("Separator", "Date")
+                else value_field.currentText()
+            )
+            fields.append({"group": group, "value": value or ""})
+        return fields
+
+    def _clear_template_fields(self):
+        for row in self.prefix_field_rows:
+            self.prefix_fields_layout.removeWidget(row)
+            row.deleteLater()
+        self.prefix_field_rows.clear()
+        self.prefix_fields.clear()
+        self.prefix_groups.clear()
+
+    def _apply_template(self, template_name):
+        self._clear_template_fields()
+        for index, template_field in enumerate(self.templates[template_name]):
+            self._build_naming_field_ui(self.prefix_fields_layout)
+            group = template_field["group"]
+            value = template_field["value"]
+            self.prefix_groups[index].setCurrentText(group)
+            field = self.prefix_fields[index]
+            if group in ("Separator", "Date"):
+                option_index = field.findData(value)
+                if option_index >= 0:
+                    field.setCurrentIndex(option_index)
+            else:
+                field.setEditText(value)
+
+        if not self.prefix_fields:
+            self._build_naming_field_ui(self.prefix_fields_layout)
+        self.adjustSize()
+        QTimer.singleShot(0, self.adjustSize)
+
+    def save_template_as(self):
+        template_name, accepted = QInputDialog.getText(
+            self,
+            "Save template",
+            "Template name:",
+        )
+        template_name = template_name.strip()
+        if not accepted:
+            return
+        if not template_name:
+            QMessageBox.warning(
+                self,
+                "Invalid template name",
+                "The template name cannot be empty.",
+            )
+            return
+        if template_name in self.templates:
+            QMessageBox.warning(
+                self,
+                "Template already exists",
+                f"A template named '{template_name}' already exists. "
+                "Select it and choose Update to modify it.",
+            )
+            return
+
+        self.templates[template_name] = self._capture_template_fields()
+        self._persist_templates()
+        self.template_selector.addItem(template_name)
+        self.template_selector.setCurrentText(template_name)
+
+    def update_template(self):
+        template_name = self.template_selector.currentText()
+        if template_name not in self.templates:
+            return
+        self.templates[template_name] = self._capture_template_fields()
+        self._persist_templates()
+
+    def rename_template(self):
+        old_name = self.template_selector.currentText()
+        if old_name not in self.templates:
+            return
+
+        new_name, accepted = QInputDialog.getText(
+            self,
+            "Rename template",
+            "Template name:",
+            text=old_name,
+        )
+        new_name = new_name.strip()
+        if not accepted:
+            return
+        if not new_name:
+            QMessageBox.warning(
+                self,
+                "Invalid template name",
+                "The template name cannot be empty.",
+            )
+            return
+        if new_name != old_name and new_name in self.templates:
+            QMessageBox.warning(
+                self,
+                "Template already exists",
+                f"A template named '{new_name}' already exists.",
+            )
+            return
+        if new_name == old_name:
+            return
+
+        self.templates[new_name] = self.templates.pop(old_name)
+        self.template_selector.removeItem(self.template_selector.findText(old_name))
+        self.template_selector.addItem(new_name)
+        self.template_selector.setCurrentText(new_name)
+        self._persist_templates()
+
+    def delete_template(self):
+        template_name = self.template_selector.currentText()
+        if template_name not in self.templates:
+            return
+        del self.templates[template_name]
+        self.template_selector.removeItem(self.template_selector.currentIndex())
+        self._persist_templates()
 
 
     # ==================================================
