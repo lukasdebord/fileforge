@@ -37,7 +37,7 @@ from .prefix_fields import (
 # INITIALIZATION
 # ==================================================
 class RenameDialog(QDialog):
-    def __init__(self, file_path: Path, parent=None):
+    def __init__(self, file_paths: list[Path], parent=None):
         super().__init__(parent)
 
         self.settings = QSettings("FileForge", "RenameDialog")
@@ -57,8 +57,11 @@ class RenameDialog(QDialog):
         self.prefix_field_rows = []
         self.drop_indicator = None
 
-        # expand the user home directory and resolve the absolute path of the file
-        self.file_path = Path(file_path).expanduser().resolve()
+        # expand the user home directory and resolve the absolute path of the files
+        self.file_paths = [
+            Path(file_path).expanduser().resolve()
+            for file_path in file_paths
+        ]
 
         self.setWindowTitle("Rename with FileForge")
         self.setMinimumWidth(360)
@@ -85,17 +88,21 @@ class RenameDialog(QDialog):
         self._build_file_info_ui(layout)
         self._build_naming_field_ui(self.prefix_fields_layout)
         layout.addWidget(self.prefix_fields_area)
-        self._build_extension_ui(layout)
+        # self._build_extension_ui(layout)
         self._build_button_ui(layout)
 
 
 
     # -- File info UI ---
     def _build_file_info_ui(self, layout):
-        layout.addWidget(QLabel("Original filename:"))
+        layout.addWidget(QLabel("Original filenames:"))
 
-        # show the original filename without the extension
-        self.original_file_name = QLabel(self.file_path.stem)
+        # show the original filenames without the extension
+        self.original_file_name = QLabel(
+            "\n".join(
+                str(file_path.name) for file_path in self.file_paths
+            )
+        )
 
         layout.addWidget(self.original_file_name)
 
@@ -104,12 +111,12 @@ class RenameDialog(QDialog):
         add_prefix_field.setFixedWidth(30)
         add_prefix_field.clicked.connect(self.add_file_name_prefix_field)
 
+
         prefix_layout_buttons = QHBoxLayout()
 
         # heading (preferably remove new line to use margin instead)
         prefix_layout_buttons.addWidget(QLabel("\nFilename prefixes"))
         prefix_layout_buttons.addWidget(add_prefix_field)
-
         layout.addLayout(prefix_layout_buttons)
 
 
@@ -165,7 +172,7 @@ class RenameDialog(QDialog):
 
     # --- EXTENSION UI ---
     def _build_extension_ui(self, layout):
-        extension = self.file_path.suffix
+        extension = self.file_paths[0].suffix if self.file_paths else ""
         if extension:
             layout.addWidget(QLabel(f"Extension: {extension}"))
 
@@ -400,34 +407,51 @@ class RenameDialog(QDialog):
             )
             return
 
-        # Keep the original extension.
-        new_path = self.file_path.with_name(
-            new_name + self.file_path.suffix
-        )
+        # Keep each original extension and add a sequence number for batch renames.
+        new_paths = [
+            file_path.with_name(
+                f"{new_name}{index if len(self.file_paths) > 1 else ''}"
+                f"{file_path.suffix}"
+            )
+            for index, file_path in enumerate(self.file_paths, start=1)
+        ]
 
-        if new_path == self.file_path:
+        if all(
+            new_path == file_path
+            for file_path, new_path in zip(self.file_paths, new_paths)
+        ):
             self.accept()
             return
 
-        # Check if the new file path already exists before attempting to rename.
-        if new_path.exists():
+        # Check every destination before renaming any file.
+        conflicts = [
+            new_path
+            for file_path, new_path in zip(self.file_paths, new_paths)
+            if new_path != file_path and new_path.exists()
+        ]
+        if conflicts:
             QMessageBox.warning(
                 self,
                 "File already exists",
-                f"A file named '{new_path.name}' already exists.",
+                "A file already exists at:\n"
+                + "\n".join(str(path) for path in conflicts),
             )
             return
 
-        # Attempt to rename the file and check for errors
-        try:
-            self.file_path.rename(new_path)
-        except OSError as error:
-            QMessageBox.critical(
-                self,
-                "Rename failed",
-                f"Could not rename the file:\n{error}",
-            )
-            return
+        for index, (file_path, new_path) in enumerate(
+            zip(self.file_paths, new_paths)
+        ):
+            if new_path == file_path:
+                continue
+            try:
+                file_path.rename(new_path)
+            except OSError as error:
+                QMessageBox.critical(
+                    self,
+                    "Rename failed",
+                    f"Could not rename '{file_path.name}':\n{error}",
+                )
+                return
+            self.file_paths[index] = new_path
 
-        self.file_path = new_path
         self.accept()

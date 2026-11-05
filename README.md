@@ -39,8 +39,11 @@ python -m fileforge.main
 
 Run rename dialog through CLI
 ```
-python -m fileforge.main --rename [file-path]
+python -m fileforge.main --rename [file-path ...]
 ```
+When multiple files are provided, FileForge appends incrementing numbers to the
+entered filename (for example, `screenshot1.png` and `screenshot2.png`) while
+preserving each file's original extension.
 
 Set up build
 ```

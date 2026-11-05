@@ -24,6 +24,7 @@ def main():
     parser.add_argument(
         "--rename",
         type=Path,
+        nargs="+",
         help="Open the rename dialog for a selected file",
     )
     args = parser.parse_args()
@@ -34,14 +35,22 @@ def main():
     # args.rename contains the path to the file if the --rename argument was provided
         # this could be used later for implementing Open with FileForge functionality
     if args.rename:
-        file_path = args.rename.expanduser().resolve()
+        file_paths = [
+            path.expanduser().resolve() 
+            for path in args.rename
+        ]
+
+        invalid_paths = [
+            path for path in file_paths 
+            if not path.is_file()
+        ]
 
         # file not found -> error out with a message
-        if not file_path.is_file():
-            parser.error(f"File not found: {file_path}")
+        if invalid_paths:
+            parser.error(f"File(s) not found: {', '.join(str(path) for path in invalid_paths)}")
 
         # create the rename dialog window for the selected file
-        window = RenameDialog(file_path)
+        window = RenameDialog(file_paths)
     # if no --rename argument was provided, display the main window
     else:
         window = MainWindow()
